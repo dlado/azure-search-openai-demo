@@ -1,15 +1,14 @@
 import html
 from typing import IO, AsyncGenerator, Union
 
-from azure.ai.formrecognizer import DocumentTable
-from azure.ai.formrecognizer.aio import DocumentAnalysisClient
+from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
+from azure.ai.documentintelligence.models import DocumentTable
 from azure.core.credentials import AzureKeyCredential
 from azure.core.credentials_async import AsyncTokenCredential
 from pypdf import PdfReader
 
 from .page import Page
 from .parser import Parser
-from .strategy import USER_AGENT
 
 
 class LocalPdfParser(Parser):
@@ -19,6 +18,9 @@ class LocalPdfParser(Parser):
     """
 
     async def parse(self, content: IO) -> AsyncGenerator[Page, None]:
+        if self.verbose:
+            print(f"\tExtracting text from '{content.name}' using local PDF parser (pypdf)")
+
         reader = PdfReader(content)
         pages = reader.pages
         offset = 0
@@ -30,7 +32,7 @@ class LocalPdfParser(Parser):
 
 class DocumentAnalysisParser(Parser):
     """
-    Concrete parser backed by Azure AI Document Intelligence that can parse PDFS into pages
+    Concrete parser backed by Azure AI Document Intelligence that can parse many document formats into pages
     To learn more, please visit https://learn.microsoft.com/azure/ai-services/document-intelligence/overview
     """
 
@@ -50,10 +52,12 @@ class DocumentAnalysisParser(Parser):
         if self.verbose:
             print(f"Extracting text from '{content.name}' using Azure Document Intelligence")
 
-        async with DocumentAnalysisClient(
-            endpoint=self.endpoint, credential=self.credential, headers={"x-ms-useragent": USER_AGENT}
-        ) as form_recognizer_client:
-            poller = await form_recognizer_client.begin_analyze_document(model_id=self.model_id, document=content)
+        async with DocumentIntelligenceClient(
+            endpoint=self.endpoint, credential=self.credential
+        ) as document_intelligence_client:
+            poller = await document_intelligence_client.begin_analyze_document(
+                model_id=self.model_id, analyze_request=content, content_type="application/octet-stream"
+            )
             form_recognizer_results = await poller.result()
 
             offset = 0
